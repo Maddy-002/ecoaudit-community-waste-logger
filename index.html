@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EcoAudit | Smart Waste Management</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+    <style>
+        :root {
+            --accent: #2dd4bf;
+            --accent-glow: rgba(45, 212, 191, 0.45);
+            --surface: rgba(15, 23, 42, 0.68);
+            --surface-hover: rgba(30, 41, 59, 0.9);
+            --border: rgba(255, 255, 255, 0.12);
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --danger: #f43f5e;
+        }
+
+        body.light-mode {
+            --surface: rgba(255, 255, 255, 0.78);
+            --surface-hover: rgba(255, 255, 255, 0.96);
+            --border: rgba(15, 23, 42, 0.14);
+            --text: #0f172a;
+            --muted: #475569;
+            --accent-glow: rgba(15, 118, 110, 0.25);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            padding: 40px 20px;
+            display: flex;
+            justify-content: center;
+            color: var(--text);
+            overflow-x: hidden;
+            background: #020617;
+        }
+
+        .animated-grid-bg {
+            position: fixed;
+            inset: 0;
+            z-index: -2;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 20% 20%, rgba(45, 212, 191, 0.38), transparent 30%),
+                radial-gradient(circle at 80% 30%, rgba(59, 130, 246, 0.35), transparent 32%),
+                radial-gradient(circle at 50% 80%, rgba(168, 85, 247, 0.3), transparent 35%),
+                linear-gradient(135deg, #020617, #0f172a, #111827);
+            background-size: 220% 220%;
+            animation: liveGradient 12s ease-in-out infinite alternate;
+        }
+
+        .animated-grid-bg::before {
+            content: "";
+            position: absolute;
+            inset: -50%;
+            background: conic-gradient(
+                from 0deg,
+                transparent,
+                rgba(45, 212, 191, 0.13),
+                transparent,
+                rgba(59, 130, 246, 0.13),
+                transparent,
+                rgba(168, 85, 247, 0.13),
+                transparent
+            );
+            animation: rotateGlow 20s linear infinite;
+        }
+
+        .animated-grid-bg::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+            background-size: 45px 45px;
+            -webkit-mask-image: radial-gradient(circle at center, black 40%, transparent 82%);
+            mask-image: radial-gradient(circle at center, black 40%, transparent 82%);
+            animation: gridMove 8s ease-in-out infinite alternate;
+        }
+
+        body::before,
+        body::after {
+            content: "";
+            position: fixed;
+            width: 280px;
+            height: 280px;
+            border-radius: 50%;
+            z-index: -1;
+            filter: blur(20px);
+            opacity: 0.45;
+            pointer-events: none;
+        }
+
+        body::before {
+            left: 8%;
+            top: 18%;
+            background: rgba(45, 212, 191, 0.38);
+            animation: orbOne 10s ease-in-out infinite alternate;
+        }
+
+        body::after {
+            right: 8%;
+            bottom: 12%;
+            background: rgba(59, 130, 246, 0.38);
+            animation: orbTwo 11s ease-in-out infinite alternate;
+        }
+
+        body.light-mode .animated-grid-bg {
+            background:
+                radial-gradient(circle at 20% 20%, rgba(20, 184, 166, 0.24), transparent 30%),
+                radial-gradient(circle at 80% 30%, rgba(59, 130, 246, 0.22), transparent 32%),
+                radial-gradient(circle at 50% 80%, rgba(168, 85, 247, 0.18), transparent 35%),
+                linear-gradient(135deg, #f8fafc, #e0f2fe, #ccfbf1);
+            background-size: 220% 220%;
+        }
+
+        @keyframes liveGradient {
+            0% { background-position: 0% 50%; filter: hue-rotate(0deg); }
+            50% { background-position: 100% 50%; filter: hue-rotate(22deg); }
+            100% { background-position: 50% 100%; filter: hue-rotate(-12deg); }
+        }
+
+        @keyframes rotateGlow {
+            from { transform: rotate(0deg) scale(1); }
+            to { transform: rotate(360deg) scale(1.1); }
+        }
+
+        @keyframes gridMove {
+            from { transform: translateY(0) scale(1); opacity: 0.55; }
+            to { transform: translateY(-25px) scale(1.04); opacity: 0.85; }
+        }
+
+        @keyframes orbOne {
+            from { transform: translate(0, 0) scale(1); }
+            to { transform: translate(80px, 120px) scale(1.25); }
+        }
+
+        @keyframes orbTwo {
+            from { transform: translate(0, 0) scale(1); }
+            to { transform: translate(-120px, -90px) scale(1.2); }
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            z-index: 1;
+        }
+
+        .glass-panel {
+            background: var(--surface);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            padding: 35px;
+            box-shadow: 0 24px 45px rgba(0, 0, 0, 0.38);
+        }
+
+        #auth-screen {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            padding: 20px;
+            backdrop-filter: blur(25px);
+            transition: opacity 0.4s ease;
+        }
+
+        .auth-box {
+            width: 100%;
+            max-width: 450px;
+            text-align: center;
+            background: rgba(15, 23, 42, 0.9);
+        }
+
+        .logo {
+            margin-bottom: 28px;
+        }
+
+        .logo i,
+        .title-icon {
+            color: var(--accent);
+            font-size: 2.5rem;
+            filter: drop-shadow(0 0 14px var(--accent-glow));
+        }
+
+        h1 {
+            font-size: 3rem;
+            letter-spacing: -1.5px;
+            background: linear-gradient(90deg, #2dd4bf, #3b82f6);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo h1 {
+            font-size: 2.5rem;
+            margin-top: 10px;
+        }
+
+        .logo p,
+        header p {
+            color: var(--muted);
+            font-size: 1.05rem;
+        }
+
+        .captcha-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .captcha-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            background: rgba(0, 0, 0, 0.58);
+            padding: 15px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+        }
+
+        #captcha-canvas {
+            background: #0f172a;
+            border-radius: 10px;
+            border: 1px solid rgba(45, 212, 191, 0.35);
+            box-shadow: 0 0 16px rgba(45, 212, 191, 0.15);
+            width: 100%;
+            height: 70px;
+        }
+
+        .icon-btn {
+            background: rgba(45, 212, 191, 0.12);
+            border: 1px solid rgba(45, 212, 191, 0.24);
+            color: var(--accent);
+            border-radius: 12px;
+            width: 60px;
+            min-width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            cursor: pointer;
+            transition: 0.3s ease;
+            padding: 0;
+        }
+
+        .icon-btn:hover {
+            transform: rotate(180deg) scale(1.05);
+            background: rgba(45, 212, 191, 0.22);
+            box-shadow: 0 0 18px rgba(45, 212, 191, 0.45);
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 18px;
+            margin-bottom: 20px;
+            background: rgba(0, 0, 0, 0.42);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: white;
+            font-size: 15px;
+            outline: none;
+            transition: 0.3s;
+        }
+
+        body.light-mode input,
+        body.light-mode select {
+            background: rgba(255, 255, 255, 0.85);
+            color: #0f172a;
+        }
+
+        input:focus,
+        select:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 16px var(--accent-glow);
+        }
+
+        select option {
+            background: #0f172a;
+            color: white;
+        }
+
+        #captcha-input {
+            text-align: center;
+            font-size: 1.15rem;
+            letter-spacing: 2px;
+            font-weight: 800;
+            margin-bottom: 0;
+        }
+
+        label {
+            display: block;
+            text-align: left;
+            margin-bottom: 8px;
+            color: var(--muted);
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        button {
+            width: 100%;
+            padding: 18px;
+            border-radius: 12px;
+            border: none;
+            font-weight: 800;
+            cursor: pointer;
+            transition: 0.3s;
+            font-size: 15px;
+        }
+
+        .primary-btn {
+            background: var(--accent);
+            color: #09090b;
+        }
+
+        .primary-btn:hover {
+            box-shadow: 0 0 22px var(--accent-glow);
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .title-wrapper {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .header-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 22px;
+            flex-wrap: wrap;
+        }
+
+        .secondary-btn,
+        .danger-btn {
+            width: auto;
+            padding: 11px 18px;
+            border-radius: 10px;
+            font-size: 13px;
+        }
+
+        .secondary-btn {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .danger-btn {
+            background: rgba(239, 68, 68, 0.1);
+            color: #fca5a5;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 18px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 24px;
+            text-align: center;
+            box-shadow: 0 20px 35px rgba(0, 0, 0, 0.22);
+        }
+
+        .stat-card i {
+            font-size: 2rem;
+            color: var(--accent);
+            margin-bottom: 12px;
+        }
+
+        .stat-card h2 {
+            border: none;
+            padding: 0;
+            margin: 0;
+            font-size: 2rem;
+            color: var(--text);
+            -webkit-text-fill-color: currentColor;
+            background: none;
+        }
+
+        .stat-card span {
+            display: block;
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 0.82rem;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1.3fr;
+            gap: 30px;
+            align-items: start;
+        }
+
+        .left-col,
+        .right-col {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        h2 {
+            font-size: 1.45rem;
+            margin-bottom: 25px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 15px;
+            color: var(--text);
+        }
+
+        .info-box {
+            background: rgba(244, 63, 94, 0.1);
+            border-left: 3px solid var(--danger);
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .info-box h4 {
+            color: var(--danger);
+            margin-bottom: 5px;
+        }
+
+        .info-box p,
+        .tips ul {
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .tips ul {
+            padding-left: 18px;
+            line-height: 1.9;
+        }
+
+        .export-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 25px;
+        }
+
+        .export-header h2 {
+            margin: 0;
+            border: none;
+            padding: 0;
+        }
+
+        .stats {
+            background: rgba(0, 0, 0, 0.48);
+            border: 1px solid var(--border);
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        body.light-mode .stats {
+            background: rgba(255, 255, 255, 0.72);
+        }
+
+        .stats span {
+            color: var(--accent);
+            font-weight: 800;
+            font-size: 1.5rem;
+            display: block;
+            margin-top: 5px;
+        }
+
+        .impact-analytics {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .impact-metric {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            background: var(--surface-hover);
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
+        .metric-icon {
+            font-size: 2rem;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        .metric-data span {
+            display: block;
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: #3b82f6;
+        }
+
+        .metric-data p {
+            font-size: 0.75rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            margin-top: 3px;
+        }
+
+        #map {
+            width: 100%;
+            height: 280px;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            margin-bottom: 25px;
+        }
+
+        .log-card {
+            background: rgba(0, 0, 0, 0.42);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            border-left: 4px solid var(--accent);
+            border-top: 1px solid var(--border);
+            border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+
+        body.light-mode .log-card {
+            background: rgba(255, 255, 255, 0.84);
+        }
+
+        .log-card h4 {
+            margin-bottom: 10px;
+        }
+
+        .log-details {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 0.85rem;
+            color: var(--muted);
+            flex-wrap: wrap;
+        }
+
+        .empty-state,
+        .error-msg,
+        #status-msg {
+            text-align: center;
+            font-size: 0.9rem;
+        }
+
+        .empty-state {
+            color: var(--muted);
+            padding: 30px 10px;
+        }
+
+        .error-msg {
+            color: #f87171;
+            margin-top: 15px;
+        }
+
+        #status-msg {
+            margin-top: 15px;
+            font-weight: 700;
+        }
+
+        #toast {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            max-width: 320px;
+            background: #0f172a;
+            color: white;
+            padding: 14px 18px;
+            border: 1px solid rgba(45, 212, 191, 0.3);
+            border-radius: 12px;
+            transform: translateY(20px);
+            opacity: 0;
+            pointer-events: none;
+            transition: 0.3s ease;
+            z-index: 200;
+        }
+
+        #toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .pdf-only {
+            display: none;
+        }
+
+        .pdf-print-mode {
+            background: #ffffff !important;
+            color: #0f172a !important;
+            border: none !important;
+            padding: 40px !important;
+        }
+
+        .pdf-print-mode * {
+            color: #0f172a !important;
+            border-color: #cbd5e1 !important;
+            box-shadow: none !important;
+            filter: none !important;
+            background: transparent !important;
+        }
+
+        .pdf-print-mode .log-card,
+        .pdf-print-mode .stats,
+        .pdf-print-mode .impact-metric {
+            background: #f8fafc !important;
+            border: 1px solid #cbd5e1 !important;
+        }
+
+        .pdf-print-mode #map,
+        .pdf-print-mode .action-buttons {
+            display: none !important;
+        }
+
+        .pdf-print-mode #pdf-footer {
+            display: block !important;
+            margin-top: 40px;
+            padding-top: 25px;
+            border-top: 2px dashed #cbd5e1 !important;
+            text-align: center;
+        }
+
+        @media (max-width: 900px) {
+            body {
+                padding: 24px 14px;
+            }
+
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .glass-panel {
+                padding: 24px;
+            }
+        }
+
+        @media (max-width: 520px) {
+            h1 {
+                font-size: 2.2rem;
+            }
+
+            .stats-grid,
+            .impact-analytics {
+                grid-template-columns: 1fr;
+            }
+
+            .captcha-container {
+                flex-direction: column;
+            }
+
+            .icon-btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="animated-grid-bg"></div>
+    <div id="toast"></div>
+
+    <section id="auth-screen">
+        <div class="auth-box glass-panel">
+            <div class="logo">
+                <i class="fa-solid fa-earth-asia"></i>
+                <h1>EcoAudit</h1>
+                <p>AI Powered Smart Waste Tracking System</p>
+            </div>
+
+            <form id="auth-form">
+                <div class="captcha-wrapper">
+                    <div class="captcha-container">
+                        <canvas id="captcha-canvas" width="220" height="70"></canvas>
+                        <button type="button" id="refresh-captcha" class="icon-btn">
+                            <i class="fa-solid fa-rotate-right"></i>
+                        </button>
+                    </div>
+
+                    <input id="captcha-input" placeholder="Enter Captcha" autocomplete="off" required />
+                </div>
+
+                <button class="primary-btn" type="submit">
+                    <i class="fa-solid fa-lock"></i>
+                    Access Dashboard
+                </button>
+
+                <p id="auth-error" class="error-msg"></p>
+            </form>
+        </div>
+    </section>
+
+    <main id="app-content" class="container" style="display:none;">
+        <header>
+            <div class="title-wrapper">
+                <i class="fa-solid fa-earth-asia title-icon"></i>
+                <h1>EcoAudit Dashboard</h1>
+            </div>
+
+            <p>Intelligent Community Waste Monitoring</p>
+
+            <div class="header-buttons">
+                <button id="theme-toggle" class="secondary-btn" type="button">☀️ Light Mode</button>
+                <button id="download-pdf" class="secondary-btn" type="button">
+                    <i class="fa-solid fa-file-pdf"></i>
+                    Export PDF
+                </button>
+            </div>
+        </header>
+
+        <section class="stats-grid">
+            <div class="stat-card">
+                <i class="fa-solid fa-weight-scale"></i>
+                <h2 id="total-weight">0</h2>
+                <span>Total Waste (kg)</span>
+            </div>
+
+            <div class="stat-card">
+                <i class="fa-solid fa-cloud"></i>
+                <h2 id="co2-saved">0.0</h2>
+                <span>CO₂ Prevented</span>
+            </div>
+
+            <div class="stat-card">
+                <i class="fa-solid fa-tree"></i>
+                <h2 id="trees-saved">0.0</h2>
+                <span>Trees Equivalent</span>
+            </div>
+
+            <div class="stat-card">
+                <i class="fa-solid fa-location-dot"></i>
+                <h2 id="verified-count">0</h2>
+                <span>Verified Locations</span>
+            </div>
+        </section>
+
+        <section class="dashboard-grid">
+            <div class="left-col">
+                <div class="glass-panel">
+                    <h2>Waste Entry</h2>
+
+                    <form id="waste-form">
+                        <label for="category">Waste Category</label>
+                        <select id="category" required>
+                            <option value="">Choose...</option>
+                            <option value="Plastic">♻ Plastic</option>
+                            <option value="Paper">📄 Paper</option>
+                            <option value="Organic">🍃 Organic</option>
+                            <option value="Glass">🍾 Glass</option>
+                            <option value="E-Waste">💻 E-Waste</option>
+                        </select>
+
+                        <div id="dynamic-info" class="info-box hidden">
+                            <h4 id="info-title"></h4>
+                            <p id="info-desc"></p>
+                        </div>
+
+                        <label for="weight">Weight (kg)</label>
+                        <input id="weight" type="number" min="0.1" step="0.1" placeholder="Enter weight" required />
+
+                        <button class="primary-btn" id="submit-btn" type="submit">
+                            <i class="fa-solid fa-location-crosshairs"></i>
+                            Verify & Save
+                        </button>
+
+                        <p id="status-msg"></p>
+                    </form>
+                </div>
+
+                <div class="glass-panel tips">
+                    <h2>Sustainability Tips</h2>
+                    <ul>
+                        <li>Reduce single-use plastics.</li>
+                        <li>Separate biodegradable waste.</li>
+                        <li>Recycle paper and cardboard.</li>
+                        <li>Dispose batteries responsibly.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="right-col">
+                <div id="export-area" class="glass-panel">
+                    <div class="export-header">
+                        <h2>Audit Report</h2>
+                        <div class="action-buttons">
+                            <button id="clear-btn" class="danger-btn" type="button">🗑️ Reset</button>
+                        </div>
+                    </div>
+
+                    <div class="stats">
+                        <h3>Total Waste Recorded</h3>
+                        <span><span id="report-total-weight">0</span> kg</span>
+                    </div>
+
+                    <div class="impact-analytics">
+                        <div class="impact-metric">
+                            <div class="metric-icon">☁️</div>
+                            <div class="metric-data">
+                                <span id="report-co2-saved">0.0</span>
+                                <p>kg CO₂ Prevented</p>
+                            </div>
+                        </div>
+
+                        <div class="impact-metric">
+                            <div class="metric-icon">🌳</div>
+                            <div class="metric-data">
+                                <span id="report-trees-saved">0.0</span>
+                                <p>Trees Equivalent</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="map"></div>
+
+                    <h2 class="logs-heading">Recent Waste Logs</h2>
+
+                    <div id="logs-container">
+                        <p class="empty-state">Awaiting audit data...</p>
+                    </div>
+
+                    <div id="pdf-footer" class="pdf-only">
+                        <h3>EcoAudit Official Report</h3>
+                        <p>Generated from EcoAudit Smart Waste Management System</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+
+        import {
+            getFirestore,
+            collection,
+            addDoc,
+            onSnapshot,
+            query,
+            orderBy,
+            serverTimestamp,
+            getDocs,
+            deleteDoc,
+            doc
+        } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCsfnnAknKLhx5N1boV4_kdPtMTlWxGVaQ",
+            authDomain: "ecoaudit-f8bc9.firebaseapp.com",
+            projectId: "ecoaudit-f8bc9",
+            storageBucket: "ecoaudit-f8bc9.firebasestorage.app",
+            messagingSenderId: "21919473929",
+            appId: "1:21919473929:web:695c2029d4e7721bfd33d8",
+            measurementId: "G-8S57TTLFKW"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const authScreen = document.getElementById("auth-screen");
+        const authForm = document.getElementById("auth-form");
+        const appContent = document.getElementById("app-content");
+
+        const form = document.getElementById("waste-form");
+        const submitBtn = document.getElementById("submit-btn");
+        const statusMsg = document.getElementById("status-msg");
+        const logsContainer = document.getElementById("logs-container");
+
+        const totalWeightEl = document.getElementById("total-weight");
+        const co2SavedEl = document.getElementById("co2-saved");
+        const treesSavedEl = document.getElementById("trees-saved");
+        const verifiedCountEl = document.getElementById("verified-count");
+
+        const reportTotalWeightEl = document.getElementById("report-total-weight");
+        const reportCo2SavedEl = document.getElementById("report-co2-saved");
+        const reportTreesSavedEl = document.getElementById("report-trees-saved");
+
+        const clearBtn = document.getElementById("clear-btn");
+        const categorySelect = document.getElementById("category");
+
+        const dynamicInfo = document.getElementById("dynamic-info");
+        const infoTitle = document.getElementById("info-title");
+        const infoDesc = document.getElementById("info-desc");
+
+        const captchaCanvas = document.getElementById("captcha-canvas");
+        const refreshCaptchaBtn = document.getElementById("refresh-captcha");
+        const themeToggleBtn = document.getElementById("theme-toggle");
+        const downloadPdfBtn = document.getElementById("download-pdf");
+        const toast = document.getElementById("toast");
+
+        let map = null;
+        let markerLayer = null;
+        let currentCaptcha = "";
+        let dashboardLoaded = false;
+
+        const ctx = captchaCanvas.getContext("2d");
+
+        const wasteIntelligence = {
+            Plastic: {
+                title: "Harmful Impact: Plastic",
+                desc: "Takes up to 500 years to decompose. It breaks down into microplastics that contaminate water, soil, and the food chain."
+            },
+            Paper: {
+                title: "Harmful Impact: Paper",
+                desc: "Excess paper disposal increases landfill load and drives higher demand for trees, water, and energy."
+            },
+            Organic: {
+                title: "Harmful Impact: Organic Waste",
+                desc: "When organic waste decomposes without oxygen in landfills, it releases methane, a powerful greenhouse gas."
+            },
+            Glass: {
+                title: "Harmful Impact: Glass",
+                desc: "Glass is recyclable, but discarded glass takes extremely long to break down and can physically harm ecosystems."
+            },
+            "E-Waste": {
+                title: "Harmful Impact: E-Waste",
+                desc: "E-waste can release toxic metals like lead, mercury, and cadmium into soil and water."
+            }
+        };
+
+        function showToast(message) {
+            toast.textContent = message;
+            toast.classList.add("show");
+
+            setTimeout(() => {
+                toast.classList.remove("show");
+            }, 3000);
+        }
+
+        function setStatus(message, type = "success") {
+            statusMsg.style.color = type === "error" ? "#f43f5e" : "#2dd4bf";
+            statusMsg.textContent = message;
+        }
+
+        function clearStatusLater() {
+            setTimeout(() => {
+                statusMsg.textContent = "";
+            }, 3000);
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#039;");
+        }
+
+        function generateCaptcha() {
+            const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+            currentCaptcha = "";
+
+            for (let i = 0; i < 6; i++) {
+                currentCaptcha += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+
+            ctx.clearRect(0, 0, captchaCanvas.width, captchaCanvas.height);
+            ctx.fillStyle = "#0f172a";
+            ctx.fillRect(0, 0, captchaCanvas.width, captchaCanvas.height);
+
+            for (let i = 0; i < 8; i++) {
+                ctx.beginPath();
+                ctx.moveTo(Math.random() * captchaCanvas.width, Math.random() * captchaCanvas.height);
+                ctx.lineTo(Math.random() * captchaCanvas.width, Math.random() * captchaCanvas.height);
+                ctx.strokeStyle = `rgba(45, 212, 191, ${Math.random() * 0.5})`;
+                ctx.lineWidth = Math.random() * 2;
+                ctx.stroke();
+            }
+
+            ctx.font = "bold 38px 'Plus Jakarta Sans', sans-serif";
+            ctx.fillStyle = "#f8fafc";
+            ctx.textBaseline = "middle";
+
+            for (let i = 0; i < currentCaptcha.length; i++) {
+                ctx.save();
+                ctx.translate(30 + i * 32, 35 + (Math.random() - 0.5) * 10);
+                ctx.rotate((Math.random() - 0.5) * 0.5);
+                ctx.fillText(currentCaptcha[i], -12, 0);
+                ctx.restore();
+            }
+        }
+
+        function initMap() {
+            if (map) return;
+
+            map = L.map("map", {
+                scrollWheelZoom: false
+            }).setView([9.9252, 78.1198], 12);
+
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                attribution: "&copy; OpenStreetMap contributors"
+            }).addTo(map);
+
+            markerLayer = L.layerGroup().addTo(map);
+        }
+
+        function updateMap(logs) {
+            initMap();
+            markerLayer.clearLayers();
+
+            const points = logs
+                .filter(item => typeof item.latitude === "number" && typeof item.longitude === "number")
+                .map(item => [item.latitude, item.longitude, item]);
+
+            if (!points.length) {
+                map.setView([9.9252, 78.1198], 12);
+                return;
+            }
+
+            const bounds = [];
+
+            points.forEach(([lat, lng, item]) => {
+                bounds.push([lat, lng]);
+
+                L.marker([lat, lng])
+                    .bindPopup(`
+                        <strong>${escapeHtml(item.category)}</strong><br>
+                        ${Number(item.weight).toFixed(1)} kg<br>
+                        ${escapeHtml(item.dateStr)}
+                    `)
+                    .addTo(markerLayer);
+            });
+
+            map.fitBounds(bounds, {
+                padding: [30, 30],
+                maxZoom: 15
+            });
+        }
+
+        categorySelect.addEventListener("change", event => {
+            const selected = event.target.value;
+
+            if (wasteIntelligence[selected]) {
+                infoTitle.textContent = wasteIntelligence[selected].title;
+                infoDesc.textContent = wasteIntelligence[selected].desc;
+                dynamicInfo.classList.remove("hidden");
+            } else {
+                dynamicInfo.classList.add("hidden");
+                infoTitle.textContent = "";
+                infoDesc.textContent = "";
+            }
+        });
+
+        authForm.addEventListener("submit", event => {
+            event.preventDefault();
+
+            const captchaInput = document.getElementById("captcha-input").value.trim();
+
+            if (captchaInput === currentCaptcha) {
+                document.getElementById("auth-error").textContent = "";
+                authScreen.style.opacity = "0";
+
+                setTimeout(() => {
+                    authScreen.style.display = "none";
+                    appContent.style.display = "block";
+
+                    initMap();
+
+                    setTimeout(() => {
+                        map.invalidateSize();
+                    }, 250);
+
+                    if (!dashboardLoaded) {
+                        loadDashboard();
+                        dashboardLoaded = true;
+                    }
+
+                    showToast("Dashboard access granted.");
+                }, 450);
+            } else {
+                document.getElementById("auth-error").textContent =
+                    "Security check failed. Please enter the correct captcha.";
+
+                document.getElementById("captcha-input").value = "";
+                generateCaptcha();
+            }
+        });
+
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+
+            const category = categorySelect.value;
+            const weight = Number(document.getElementById("weight").value);
+
+            if (!category || Number.isNaN(weight) || weight <= 0) {
+                setStatus("Please choose category and enter valid weight.", "error");
+                return;
+            }
+
+            submitBtn.disabled = true;
+            setStatus("Verifying location & securing data...");
+
+            if (!navigator.geolocation) {
+                showError("Geolocation is not supported in this browser.");
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                async position => {
+                    try {
+                        await addDoc(collection(db, "wasteLogs"), {
+                            category: category,
+                            weight: weight,
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude,
+                            accuracy: position.coords.accuracy || null,
+                            createdAt: serverTimestamp()
+                        });
+
+                        setStatus("Data successfully saved.");
+                        showToast("Waste log saved successfully.");
+
+                        form.reset();
+                        dynamicInfo.classList.add("hidden");
+                        clearStatusLater();
+                    } catch (error) {
+                        console.error(error);
+                        showError("Database save failed. Check Firebase rules/config.");
+                    } finally {
+                        submitBtn.disabled = false;
+                    }
+                },
+                error => {
+                    console.error(error);
+                    showError("Location permission is required for audit verification.");
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 15000,
+                    maximumAge: 0
+                }
+            );
+        });
+
+        function showError(message) {
+            setStatus(message, "error");
+            submitBtn.disabled = false;
+        }
+
+        function loadDashboard() {
+            const logsQuery = query(
+                collection(db, "wasteLogs"),
+                orderBy("createdAt", "desc")
+            );
+
+            onSnapshot(
+                logsQuery,
+                snapshot => {
+                    logsContainer.innerHTML = "";
+
+                    let totalWeight = 0;
+                    const logs = [];
+
+                    if (snapshot.empty) {
+                        updateDashboardNumbers(0, 0, 0, 0);
+                        logsContainer.innerHTML = '<p class="empty-state">Awaiting audit data...</p>';
+                        updateMap([]);
+                        return;
+                    }
+
+                    snapshot.forEach(docSnap => {
+                        const data = docSnap.data();
+
+                        const weight = Number(data.weight) || 0;
+                        totalWeight += weight;
+
+                        const dateStr = data.createdAt
+                            ? data.createdAt.toDate().toLocaleString()
+                            : "Just now";
+
+                        const logItem = {
+                            id: docSnap.id,
+                            category: data.category || "Unknown",
+                            weight: weight,
+                            latitude: data.latitude,
+                            longitude: data.longitude,
+                            dateStr: dateStr
+                        };
+
+                        logs.push(logItem);
+
+                        const card = document.createElement("div");
+                        card.className = "log-card";
+
+                        const lat = typeof logItem.latitude === "number" ? logItem.latitude.toFixed(4) : "NA";
+                        const lng = typeof logItem.longitude === "number" ? logItem.longitude.toFixed(4) : "NA";
+
+                        card.innerHTML = `
+                            <h4>${escapeHtml(logItem.category)}</h4>
+
+                            <div class="log-details">
+                                <span><strong>Weight:</strong> ${logItem.weight.toFixed(1)} kg</span>
+                                <span><strong>Loc:</strong> ${lat}, ${lng}</span>
+                            </div>
+
+                            <div class="log-details" style="margin-top:8px;">
+                                <span>${escapeHtml(logItem.dateStr)}</span>
+                            </div>
+                        `;
+
+                        logsContainer.appendChild(card);
+                    });
+
+                    const co2Prevented = totalWeight * 1.5;
+                    const treesEquivalent = co2Prevented / 21;
+                    const verifiedCount = logs.filter(item => item.latitude && item.longitude).length;
+
+                    updateDashboardNumbers(totalWeight, co2Prevented, treesEquivalent, verifiedCount);
+                    updateMap(logs);
+                },
+                error => {
+                    console.error(error);
+
+                    logsContainer.innerHTML = `
+                        <p class="empty-state">
+                            Unable to load audit logs. Check Firestore rules and collection permission.
+                        </p>
+                    `;
+                }
+            );
+        }
+
+        function updateDashboardNumbers(totalWeight, co2Prevented, treesEquivalent, verifiedCount) {
+            totalWeightEl.textContent = totalWeight.toFixed(1);
+            co2SavedEl.textContent = co2Prevented.toFixed(1);
+            treesSavedEl.textContent = treesEquivalent.toFixed(1);
+            verifiedCountEl.textContent = String(verifiedCount);
+
+            reportTotalWeightEl.textContent = totalWeight.toFixed(1);
+            reportCo2SavedEl.textContent = co2Prevented.toFixed(1);
+            reportTreesSavedEl.textContent = treesEquivalent.toFixed(1);
+        }
+
+        clearBtn.addEventListener("click", async () => {
+            const confirmed = confirm("⚠️ Permanently delete all audit logs?");
+
+            if (!confirmed) return;
+
+            try {
+                clearBtn.textContent = "Purging...";
+                clearBtn.disabled = true;
+
+                const snapshot = await getDocs(collection(db, "wasteLogs"));
+
+                await Promise.all(
+                    snapshot.docs.map(item => deleteDoc(doc(db, "wasteLogs", item.id)))
+                );
+
+                showToast("All audit logs cleared.");
+            } catch (error) {
+                console.error(error);
+                alert("Purge failed. Check Firestore delete permission.");
+            } finally {
+                clearBtn.textContent = "🗑️ Reset";
+                clearBtn.disabled = false;
+            }
+        });
+
+        themeToggleBtn.addEventListener("click", () => {
+            document.body.classList.toggle("light-mode");
+
+            const isLight = document.body.classList.contains("light-mode");
+            themeToggleBtn.textContent = isLight ? "🌙 Dark Mode" : "☀️ Light Mode";
+        });
+
+        downloadPdfBtn.addEventListener("click", () => {
+            if (typeof html2pdf === "undefined") {
+                alert("PDF engine is not loaded.");
+                return;
+            }
+
+            const element = document.getElementById("export-area");
+            element.classList.add("pdf-print-mode");
+
+            html2pdf()
+                .set({
+                    margin: [0.5, 0.5, 0.5, 0.5],
+                    filename: "EcoAudit_Official_Report.pdf",
+                    image: { type: "jpeg", quality: 1 },
+                    html2canvas: {
+                        scale: 2,
+                        useCORS: true,
+                        logging: false,
+                        backgroundColor: "#ffffff"
+                    },
+                    jsPDF: {
+                        unit: "in",
+                        format: "letter",
+                        orientation: "portrait"
+                    }
+                })
+                .from(element)
+                .save()
+                .then(() => {
+                    element.classList.remove("pdf-print-mode");
+                    showToast("PDF exported successfully.");
+                })
+                .catch(error => {
+                    console.error(error);
+                    element.classList.remove("pdf-print-mode");
+                    alert("PDF export failed.");
+                });
+        });
+
+        generateCaptcha();
+        refreshCaptchaBtn.addEventListener("click", generateCaptcha);
+    </script>
+</body>
+</html>
